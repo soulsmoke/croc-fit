@@ -5,7 +5,7 @@ services:
     rootDir: croc-fit-api
     plan: free
     buildCommand: pip install uv && echo "machine github.com login x-access-token password ${GITHUB_TOKEN}" > ~/.netrc && chmod 600 ~/.netrc && uv sync --frozen
-    startCommand: uv run uvicorn croc_fit_api.server:app --host 0.0.0.0 --port $PORT
+    startCommand: uv run --no-sync uvicorn croc_fit_api.server:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/v1/health
     envVars:
       - key: GITHUB_TOKEN
