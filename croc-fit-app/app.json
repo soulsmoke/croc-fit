@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "CrocFit Coach AI",
+    "slug": "croc-fit-app",
+    "version": "1.0.0",
+    "scheme": "crocfit",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "web": {
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
+    },
+    "ios": {
+      "bundleIdentifier": "com.hnrg.crocfit",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "CrocFit uses your photo library to attach images to your coach messages.",
+        "NSSpeechRecognitionUsageDescription": "CrocFit uses speech recognition so you can dictate messages to your coach.",
+        "NSMicrophoneUsageDescription": "CrocFit uses your microphone to capture voice messages for the coach."
+      }
+    },
+    "android": {
+      "package": "com.hnrg.crocfit",
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CrocFit uses your photo library to attach images to your coach messages."
+        }
+      ],
+      "expo-speech-recognition"
+    ]
+  }
+}

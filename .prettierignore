@@ -1,0 +1,8 @@
+
+# gregh — do not format framework files
+.github/
+AGENTS.md
+AGENT_WORKLOG.md
+AGENT_WORKLOG.template.md
+.github/archives/
+# end gregh

@@ -1,0 +1,15 @@
+{
+  "inputs": [],
+  "servers": {
+    "context7": {
+      "url": "https://mcp.context7.com/mcp"
+    },
+    "supabase": {
+      "type": "http",
+      "url": "https://mcp.supabase.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ACCESS_TOKEN"
+      }
+    }
+  }
+}

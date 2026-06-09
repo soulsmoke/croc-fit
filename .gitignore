@@ -1,0 +1,26 @@
+# mono-repo root ignores
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Editor
+.vscode/settings.json
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Environment (extra safety — each sub-project has its own .gitignore)
+.env
+.env.local
+.env.*.local
+
+# Temp
+tmp/
+temp/

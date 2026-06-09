@@ -1,0 +1,336 @@
+# Security Pipeline — Full CI/CD
+#
+# Comprehensive security pipeline for build and deploy phases.
+# Covers: secret detection, SAST, dependency audit, supply chain,
+# SBOM generation (CycloneDX), VEX, and NIS2 compliance checks.
+#
+# Installed by gregh into .github/workflows/ of the target project.
+# Use "security-gate" as the required status check in branch protection.
+
+name: Security Pipeline
+
+on:
+  push:
+    branches: [main, release/*]
+  pull_request:
+    branches: ['*']
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  attestations: write
+  id-token: write
+
+# Each job exits with code 1 on findings → blocks merge via security-gate
+jobs:
+
+  # ─── SECRET DETECTION ───────────────────────────────────────────────
+  # Scans the full git history for leaked credentials, API keys, and tokens.
+  # Uses regex-based pattern matching across 150+ secret types.
+  # Requires GITLEAKS_LICENSE for private repos (free for public).
+  secrets:
+    name: Secret Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7  # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # ─── STATIC APPLICATION SECURITY TESTING (SAST) ────────────────────
+  # Runs Semgrep with multiple rulesets to find vulnerabilities in source code.
+  # - p/default: general security patterns
+  # - p/owasp-top-ten: OWASP Top 10 coverage
+  # - p/secrets: additional secret patterns (defense-in-depth with Gitleaks)
+  # Falls back to local scan mode if SEMGREP_APP_TOKEN is not configured.
+  sast:
+    name: Static Analysis (Semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:1.163.0@sha256:7cad2bc2d1e44f87f0bf4be6d1fa23aa90fb72015bebc89fb91385d813987a03
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Semgrep
+        run: |
+          if [ -n "$SEMGREP_APP_TOKEN" ]; then
+            semgrep ci --config p/default --config p/owasp-top-ten --config p/secrets
+          else
+            semgrep scan --config p/default --config p/owasp-top-ten --config p/secrets --error
+          fi
+        env:
+          SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
+
+  # ─── DEPENDENCY AUDIT (CVE) ──────────────────────────────────────────
+  # Trivy (Aqua Security) scans lock files for known vulnerabilities.
+  # Uses GitHub Advisory DB + NVD + OS distro advisories. No token required.
+  # Fails on HIGH/CRITICAL severity findings.
+  dependency-audit:
+    name: Dependency Audit (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: 1
+          format: json
+          output: trivy-results.json
+      - name: Upload Trivy results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results
+          path: trivy-results.json
+          retention-days: 90
+
+  # ─── SUPPLY CHAIN PROTECTION ───────────────────────────────────────
+  # Socket.dev performs behavioral analysis on dependencies to detect
+  # malicious packages, typosquatting, install scripts with suspicious
+  # network/filesystem access — threats that don't yet have a CVE.
+  # Complementary to dependency-review (which only catches known CVEs).
+  supply-chain:
+    name: Supply Chain (Socket.dev)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: SocketDev/action@ba6de6cc0565af1f42295590380973573297e31f  # v1.3.2
+        with:
+          mode: firewall-free
+      - name: Resolve dependencies through Socket Firewall
+        run: |
+          resolved=false
+
+          # Node.js
+          if [ -f "package-lock.json" ] || [ -f "npm-shrinkwrap.json" ]; then
+            sfw npm ci && resolved=true
+          elif [ -f "yarn.lock" ]; then
+            sfw yarn install --frozen-lockfile && resolved=true
+          elif [ -f "pnpm-lock.yaml" ]; then
+            sfw pnpm install --frozen-lockfile && resolved=true
+          fi
+
+          # Python
+          if [ -f "requirements.txt" ]; then
+            sfw pip install -r requirements.txt && resolved=true
+          elif [ -f "Pipfile.lock" ]; then
+            sfw pipenv install --deploy && resolved=true
+          elif [ -f "poetry.lock" ]; then
+            sfw poetry install --no-interaction && resolved=true
+          fi
+
+          # Go
+          if [ -f "go.sum" ]; then
+            sfw go install ./... && resolved=true
+          fi
+
+          # Ruby
+          if [ -f "Gemfile.lock" ]; then
+            sfw bundle install && resolved=true
+          fi
+
+          # Java
+          if [ -f "pom.xml" ]; then
+            sfw mvn dependency:resolve -q && resolved=true
+          elif [ -f "gradle.lockfile" ] || [ -f "settings.gradle" ] || [ -f "build.gradle" ]; then
+            sfw gradle dependencies --quiet && resolved=true
+          fi
+
+          if [ "$resolved" = false ]; then
+            echo "⚠️ No supported lock/manifest file found — skipping"
+          fi
+
+  # ─── SBOM GENERATION (CycloneDX) ──────────────────────────────────
+  # Generates a Software Bill of Materials in CycloneDX 1.5+ format.
+  # Required by NIS2 Art. 21(d) for supply chain transparency.
+  # The SBOM is uploaded as a build artifact and optionally attested
+  # with Sigstore for supply chain integrity verification.
+  sbom:
+    name: SBOM Generation (Syft)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
+          artifact-name: sbom-cyclonedx
+
+      - name: Validate SBOM
+        run: |
+          # Verify minimum required fields
+          if ! jq -e '.bomFormat == "CycloneDX"' sbom.cdx.json > /dev/null 2>&1; then
+            echo "❌ Invalid SBOM: missing or wrong bomFormat"
+            exit 1
+          fi
+          components=$(jq '.components | length' sbom.cdx.json)
+          echo "✅ SBOM generated: ${components} components"
+
+      # Optional: Sigstore attestation (requires id-token: write permission)
+      # Uncomment to enable supply chain integrity verification.
+      # - name: Attest SBOM
+      #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      #   uses: actions/attest-sbom@v2
+      #   with:
+      #     subject-path: sbom.cdx.json
+      #     sbom-format: cyclonedx-json
+
+  # ─── VEX GENERATION ────────────────────────────────────────────────
+  # Scans the SBOM for known vulnerabilities and generates a
+  # Vulnerability Exploitability eXchange (VEX) document.
+  # VEX communicates which CVEs are actually exploitable in context.
+  # Output: CycloneDX JSON with vulnerability assessments.
+  vex:
+    name: VEX Generation (Grype)
+    runs-on: ubuntu-latest
+    needs: [sbom]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download SBOM
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom-cyclonedx
+
+      - name: Scan for vulnerabilities
+        uses: anchore/scan-action@v6
+        continue-on-error: true  # VEX is a documentation step, not a gate — gate is dependency-audit (Trivy)
+        with:
+          sbom: sbom.cdx.json
+          fail-build: false
+          severity-cutoff: high
+          output-format: cyclonedx-json
+
+      - name: Upload VEX
+        uses: actions/upload-artifact@v4
+        with:
+          name: vex-cyclonedx
+          path: results.cdx.json
+          retention-days: 90
+
+  # ─── NIS2 COMPLIANCE CHECK ─────────────────────────────────────────
+  # Validates NIS2 Art. 21 minimum requirements are met:
+  # - SBOM generated (supply chain transparency)
+  # - Security scanning configured (vulnerability handling)
+  # - Incident response plan present
+  # This is a policy gate, not a scanner — it checks for the presence
+  # of required artifacts and documentation.
+  compliance-check:
+    name: NIS2 Compliance Check
+    runs-on: ubuntu-latest
+    needs: [sbom]
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check NIS2 Art. 21 requirements
+        run: |
+          score=0
+          total=5
+          echo "## NIS2 Art. 21 — Compliance Checklist" > compliance-report.md
+          echo "" >> compliance-report.md
+
+          # (d) Supply chain security — SBOM present
+          echo -n "| Supply chain (SBOM) | " >> compliance-report.md
+          if [ "${{ needs.sbom.result }}" = "success" ]; then
+            echo "✅ PASS |" >> compliance-report.md
+            score=$((score + 1))
+          else
+            echo "❌ FAIL — SBOM generation failed |" >> compliance-report.md
+          fi
+
+          # (e) SDLC security — security scanning in CI
+          echo -n "| SDLC security (SAST) | " >> compliance-report.md
+          if [ -f ".github/workflows/security.yml" ] || [ -f ".github/workflows/security-pipeline.yml" ]; then
+            echo "✅ PASS |" >> compliance-report.md
+            score=$((score + 1))
+          else
+            echo "⚠️ WARN — No security workflow detected |" >> compliance-report.md
+          fi
+
+          # (b) Incident handling — IR plan present
+          echo -n "| Incident handling | " >> compliance-report.md
+          ir_found=false
+          for f in INCIDENT_RESPONSE*.md docs/INCIDENT*.md docs/security/INCIDENT*.md .github/INCIDENT*.md; do
+            if ls $f 1>/dev/null 2>&1; then
+              ir_found=true
+              break
+            fi
+          done
+          if [ "$ir_found" = true ]; then
+            echo "✅ PASS |" >> compliance-report.md
+            score=$((score + 1))
+          else
+            echo "⚠️ WARN — No incident response plan found |" >> compliance-report.md
+          fi
+
+          # (f) Vulnerability disclosure — SECURITY.md present
+          echo -n "| Vulnerability disclosure | " >> compliance-report.md
+          if [ -f "SECURITY.md" ] || [ -f ".github/SECURITY.md" ]; then
+            echo "✅ PASS |" >> compliance-report.md
+            score=$((score + 1))
+          else
+            echo "⚠️ WARN — No SECURITY.md found |" >> compliance-report.md
+          fi
+
+          # (i) Cryptography — TLS/encryption config
+          echo -n "| Cryptography policy | " >> compliance-report.md
+          if grep -rq "TLS\|HTTPS\|encryption\|bcrypt\|argon2" --include="*.md" --include="*.yml" --include="*.yaml" 2>/dev/null; then
+            echo "✅ PASS |" >> compliance-report.md
+            score=$((score + 1))
+          else
+            echo "⚠️ WARN — No cryptography references found |" >> compliance-report.md
+          fi
+
+          echo "" >> compliance-report.md
+          echo "**Score: ${score}/${total}**" >> compliance-report.md
+
+          cat compliance-report.md
+          echo ""
+
+          # Fail only on critical gaps (no SBOM)
+          if [ "${{ needs.sbom.result }}" != "success" ]; then
+            echo "❌ Critical compliance gap: SBOM generation failed"
+            exit 1
+          fi
+
+      - name: Upload compliance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nis2-compliance-report
+          path: compliance-report.md
+          retention-days: 90
+
+  # ─── SECURITY GATE ─────────────────────────────────────────────────
+  # Aggregates results from all security jobs into a single status check.
+  # Use THIS job as the required status check in branch protection rules.
+  # Allows "skipped" (e.g., conditional jobs) but fails on any other non-success.
+  security-gate:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    needs: [secrets, sast, dependency-audit, supply-chain, sbom, vex, compliance-check]
+    if: always()
+    steps:
+      - name: Check all security jobs
+        run: |
+          results="${{ needs.secrets.result }} ${{ needs.sast.result }} \
+          ${{ needs.dependency-audit.result }} ${{ needs.supply-chain.result }} \
+          ${{ needs.sbom.result }} ${{ needs.vex.result }} \
+          ${{ needs.compliance-check.result }}"
+          for r in $results; do
+            if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
+              echo "❌ One or more security checks failed. Merge blocked."
+              exit 1
+            fi
+          done
+          echo "✅ All security checks passed."

@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: croc-fit-api
+    runtime: python
+    rootDir: croc-fit-api
+    plan: free
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn croc_fit_api.server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: dev
+      - key: DEBUG
+        value: "false"
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        sync: false
+      - key: LITELLM_API_BASE
+        sync: false
+      - key: LITELLM_API_KEY
+        sync: false
+      - key: LITELLM_MODEL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        sync: false

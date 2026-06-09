@@ -1,0 +1,28 @@
+name: Create Release on Tag
+
+on:
+  push:
+    tags:
+      - '**'
+  repository_dispatch:
+    types: [tag-created]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release on pushed Tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.tag || github.ref_name }}
+        run: |
+          gh release list --repo="$GITHUB_REPOSITORY" \
+          | grep -q "$tag" && echo "Release $tag already exists" \
+          || gh release create "$tag" \
+              --repo="$GITHUB_REPOSITORY" \
+              --title="$Release ${tag}" \
+              --generate-notes

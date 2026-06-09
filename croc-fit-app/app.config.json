@@ -1,0 +1,6 @@
+{
+    "apiUrl": "http://localhost:8000",
+    "supabaseUrl": "http://localhost:54321",
+    "supabaseAnonKey": "placeholder-anon-key",
+    "authMode": "supabase"
+}
