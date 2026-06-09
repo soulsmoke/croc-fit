@@ -41,6 +41,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+          # Scan all commits instead of a before..after range.
+          # Prevents "ambiguous argument" on first push (root commit has no parent).
+          GITLEAKS_LOG_OPTS: --all
 
   # ─── STATIC APPLICATION SECURITY TESTING (SAST) ────────────────────
   # Runs Semgrep with multiple rulesets to find vulnerabilities in source code.
