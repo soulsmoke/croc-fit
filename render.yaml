@@ -9,7 +9,7 @@ services:
     healthCheckPath: /api/v1/health
     envVars:
       - key: APP_ENV
-        value: dev
+        value: production
       - key: DEBUG
         value: "false"
       - key: CORS_ORIGINS
@@ -31,4 +31,14 @@ services:
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_MODEL
+        sync: false
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        sync: false
+      - key: AZURE_FOUNDRY_ENDPOINT
+        sync: false
+      - key: AZURE_FOUNDRY_API_KEY
+        sync: false
+      - key: AZURE_FOUNDRY_MODEL
         sync: false
