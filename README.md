@@ -168,6 +168,26 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=...
 
 ---
 
+## Versioning & Changelog
+
+Il progetto usa [git-cliff](https://git-cliff.org/) + [Conventional Commits](https://www.conventionalcommits.org/).
+
+```bash
+# Preview changelog per il prossimo rilascio (nessun file modificato)
+make changelog VERSION=1.1.0
+
+# Rilascio completo:
+# - bump versione in package.json e pyproject.toml
+# - rigenera CHANGELOG.md
+# - crea commit chore(release): v1.1.0 + tag v1.1.0
+make release VERSION=1.1.0
+git push origin main --tags
+```
+
+Il `CHANGELOG.md` viene rigenerato automaticamente dal `make release`. Non editarlo a mano.
+
+---
+
 ## Notes
 
 - **agent-core** è un package privato HNRG-Lab (`v2.0.3`). Richiede accesso al repo `HNRG-Lab/agent-core` tramite SSH o HTTPS autenticato.
