@@ -9,6 +9,7 @@
     "userInterfaceStyle": "light",
     "web": {
       "bundler": "metro",
+      "output": "static",
       "favicon": "./assets/favicon.png"
     },
     "ios": {
