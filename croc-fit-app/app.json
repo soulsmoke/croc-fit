@@ -10,13 +10,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/favicon.png",
-      "icon": "./assets/icon.png",
-      "meta": {
-        "apple-mobile-web-app-capable": "yes",
-        "apple-mobile-web-app-status-bar-style": "default",
-        "apple-mobile-web-app-title": "CrocFit"
-      }
+      "favicon": "./assets/favicon.png"
     },
     "ios": {
       "bundleIdentifier": "com.hnrg.crocfit",
