@@ -1,6 +1,25 @@
 {
-    "apiUrl": "http://localhost:8000",
-    "supabaseUrl": "http://localhost:54321",
-    "supabaseAnonKey": "placeholder-anon-key",
-    "authMode": "supabase"
+  "apiUrl": "http://localhost:8000",
+  "supabaseUrl": "http://localhost:54321",
+  "supabaseAnonKey": "placeholder-anon-key",
+  "authMode": "supabase",
+  "extra": {
+    "eas": {
+      "projectId": "c81b356c-4738-485a-bca9-d0337b377041"
+    }
+  },
+  "owner": "silviogne",
+  "expo": {
+    "ios": {
+      "bundleIdentifier": "com.silviogne.crocfitapp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c81b356c-4738-485a-bca9-d0337b377041"
+      }
+    }
+  }
 }
